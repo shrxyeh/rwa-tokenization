@@ -1,0 +1,11 @@
+out/
+cache/
+lib/
+broadcast/*/dry-run/
+lcov.info
+coverage/
+
+.env
+.DS_Store
+*.swp
+*.swo
