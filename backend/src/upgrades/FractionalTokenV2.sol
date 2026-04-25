@@ -12,10 +12,9 @@ import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/Nonce
 import {IIdentityRegistry} from "../interfaces/IIdentityRegistry.sol";
 
 /// @title FractionalTokenV2
-/// @notice UUPS-upgradeable version of FractionalToken.
-///         Adds token locking for vesting simulation: admin locks an investor's
-///         outbound transfers until a specified timestamp, simulating cliff vesting.
-/// @dev    Storage layout must preserve V1 slots. New V2 storage is appended at the end.
+/// @notice UUPS-upgradeable FractionalToken. Adds cliff-vesting locks on top of
+///         the V1 compliance and dividend logic.
+/// @dev Storage layout preserves V1 slots. `lockUntil` is appended at the end.
 contract FractionalTokenV2 is
     Initializable,
     ERC20Upgradeable,
@@ -25,8 +24,8 @@ contract FractionalTokenV2 is
     OwnableUpgradeable,
     UUPSUpgradeable
 {
-    // ─── V1 Immutable-equivalent Storage ─────────────────────────────────────
-    // In upgradeable contracts, "immutables" become storage slots in the proxy.
+    // ─── Storage ──────────────────────────────────────────────────────────────
+    // Mirrors V1 immutables as storage (proxy pattern)
 
     uint256 public linkedNFTId;
     address public propertyNFT;
@@ -47,13 +46,10 @@ contract FractionalTokenV2 is
     mapping(uint256 => DividendRound)            public dividendRounds;
     mapping(uint256 => mapping(address => bool)) public hasClaimed;
 
-    // ─── V2 Storage ───────────────────────────────────────────────────────────
-
-    /// @notice lockUntil[investor] = timestamp after which transfers are allowed again.
-    ///         If 0 or in the past, the investor is not locked.
+    // V2: lockUntil[investor] = timestamp after which outbound transfers are allowed.
     mapping(address => uint256) public lockUntil;
 
-    // ─── Custom Errors ────────────────────────────────────────────────────────
+    // ─── Errors / Events ──────────────────────────────────────────────────────
 
     error InitialMintAlreadyDone();
     error ComplianceTransferBlocked(string reason);
@@ -66,24 +62,15 @@ contract FractionalTokenV2 is
     error ETHTransferFailed();
     error TokensLocked(address investor, uint256 unlocksAt);
 
-    // ─── Events ───────────────────────────────────────────────────────────────
-
     event InitialSupplyMinted(address indexed to, uint256 amount);
     event DividendDeposited(uint256 indexed roundId, uint256 totalETH, uint256 snapshotBlock);
     event DividendClaimed(uint256 indexed roundId, address indexed investor, uint256 amount);
     event ComplianceCheckFailed(address indexed from, address indexed to, string reason);
-    event TokensLockedEvent(address indexed investor, uint256 unlocksAt);
-    event TokensUnlocked(address indexed investor);
+    event TokenLocked(address indexed investor, uint256 unlocksAt);
+    event TokenUnlocked(address indexed investor);
 
-    // ─── Initializer ──────────────────────────────────────────────────────────
+    // ─── Init ─────────────────────────────────────────────────────────────────
 
-    /// @param name               ERC-20 name.
-    /// @param symbol             ERC-20 symbol.
-    /// @param _linkedNFTId       NFT token ID this fractionalizes.
-    /// @param _propertyNFT       PropertyNFT contract address.
-    /// @param _identityRegistry  IdentityRegistry contract address.
-    /// @param _maxSupply         Total supply to mint.
-    /// @param initialOwner       Owner of this proxy.
     function initialize(
         string memory name,
         string memory symbol,
@@ -105,27 +92,21 @@ contract FractionalTokenV2 is
         maxSupply        = _maxSupply;
     }
 
-    // ─── V2 Feature: Token Locking ────────────────────────────────────────────
+    // ─── V2: Token Locking ────────────────────────────────────────────────────
 
-    /// @notice Locks an investor's outbound transfers until a future timestamp.
-    ///         Simulates a cliff-vesting schedule managed by the asset admin.
-    /// @param investor  The address to lock.
-    /// @param until     Unix timestamp after which transfers are permitted again.
+    /// @notice Prevents outbound transfers from `investor` until `until` (unix timestamp).
     function lockTokens(address investor, uint256 until) external onlyOwner {
         lockUntil[investor] = until;
-        emit TokensLockedEvent(investor, until);
+        emit TokenLocked(investor, until);
     }
 
-    /// @notice Releases a lock before its natural expiry.
-    /// @param investor  The address to unlock.
     function unlockTokens(address investor) external onlyOwner {
         lockUntil[investor] = 0;
-        emit TokensUnlocked(investor);
+        emit TokenUnlocked(investor);
     }
 
-    // ─── V1 Functions ─────────────────────────────────────────────────────────
+    // ─── Core ─────────────────────────────────────────────────────────────────
 
-    /// @notice Mints the full initial supply. Callable once.
     function mintInitialSupply(address to) external onlyOwner {
         if (_initialMintDone) revert InitialMintAlreadyDone();
         _initialMintDone = true;
@@ -133,16 +114,14 @@ contract FractionalTokenV2 is
         emit InitialSupplyMinted(to, maxSupply);
     }
 
-    /// @notice Burns caller's tokens.
     function burn(uint256 amount) external {
         _burn(msg.sender, amount);
     }
 
-    /// @notice Deposits ETH for a new dividend round.
     function depositDividend() external payable onlyOwner {
         if (msg.value == 0) revert ZeroETH();
-        uint256 snap   = block.number - 1;
-        uint256 supply = totalSupply();
+        uint256 snap    = block.number - 1;
+        uint256 supply  = totalSupply();
         uint256 roundId = roundCount;
         dividendRounds[roundId] = DividendRound({
             totalETH:              msg.value,
@@ -154,7 +133,6 @@ contract FractionalTokenV2 is
         emit DividendDeposited(roundId, msg.value, snap);
     }
 
-    /// @notice Claims pro-rata ETH dividend for a given round.
     function claimDividend(uint256 roundId) external {
         if (roundId >= roundCount) revert InvalidRound(roundId);
         DividendRound storage round = dividendRounds[roundId];
@@ -179,7 +157,6 @@ contract FractionalTokenV2 is
         if (from == address(0)) { super._update(from, to, amount); return; }
         if (to   == address(0)) { super._update(from, to, amount); return; }
 
-        // V2: Check vesting lock before compliance
         uint256 unlockTime = lockUntil[from];
         if (unlockTime != 0 && block.timestamp < unlockTime) {
             revert TokensLocked(from, unlockTime);

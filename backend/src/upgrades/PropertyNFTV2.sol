@@ -11,11 +11,9 @@ import {Base64} from "solady/utils/Base64.sol";
 import {LibString} from "solady/utils/LibString.sol";
 
 /// @title PropertyNFTV2
-/// @notice UUPS-upgradeable version of PropertyNFT.
-///         Demonstrates the upgrade path: preserves all V1 state and adds
-///         a per-token description field (simulating a regulatory annotation system).
-/// @dev    Deploy via ERC1967Proxy pointing at this implementation.
-///         State layout must be identical to V1 up to the new field to avoid storage collisions.
+/// @notice UUPS-upgradeable PropertyNFT. Adds per-token description field for
+///         regulatory annotations. Deploy via ERC1967Proxy.
+/// @dev Storage layout mirrors V1 exactly up to `descriptions` — never reorder.
 contract PropertyNFTV2 is
     Initializable,
     ERC721Upgradeable,
@@ -24,7 +22,7 @@ contract PropertyNFTV2 is
     OwnableUpgradeable,
     UUPSUpgradeable
 {
-    // ─── Storage — must exactly mirror PropertyNFT V1 layout ──────────────────
+    // ─── Storage ──────────────────────────────────────────────────────────────
 
     struct PropertyMetadata {
         string  name;
@@ -39,27 +37,22 @@ contract PropertyNFTV2 is
     mapping(uint256 => PropertyMetadata) public properties;
     mapping(uint256 => address)          public fractionToken;
 
-    // ─── V2 Storage (appended after V1 — never reorder above) ─────────────────
-
+    // V2: appended after V1 slots
     mapping(uint256 => string) public descriptions;
 
-    // ─── Custom Errors ────────────────────────────────────────────────────────
+    // ─── Errors / Events ──────────────────────────────────────────────────────
 
     error FractionTokenAlreadyLinked(uint256 tokenId);
     error PropertyDoesNotExist(uint256 tokenId);
     error ZeroAddress();
-
-    // ─── Events ───────────────────────────────────────────────────────────────
 
     event PropertyMinted(uint256 indexed tokenId, address indexed owner, string legalIdentifier);
     event FractionTokenLinked(uint256 indexed tokenId, address indexed tokenContract);
     event ValuationUpdated(uint256 indexed tokenId, uint256 oldValuation, uint256 newValuation);
     event DescriptionUpdated(uint256 indexed tokenId, string description);
 
-    // ─── Initializer ──────────────────────────────────────────────────────────
+    // ─── Init ─────────────────────────────────────────────────────────────────
 
-    /// @notice Replaces constructor for upgradeable contracts.
-    /// @param initialOwner  The address that will own the proxy.
     function initialize(address initialOwner) public initializer {
         __ERC721_init("RWA Property Deed", "DEED");
         __ERC721Enumerable_init();
@@ -67,21 +60,17 @@ contract PropertyNFTV2 is
         __Ownable_init(initialOwner);
     }
 
-    // ─── V2 New Feature ───────────────────────────────────────────────────────
+    // ─── V2 ───────────────────────────────────────────────────────────────────
 
-    /// @notice Appends or updates a regulatory/legal description for a token.
-    ///         In production this would store jurisdiction-specific annotations.
-    /// @param tokenId      Token to annotate.
-    /// @param description  Free-text description (e.g. "Lien released 2025-01-01").
+    /// @notice Sets a regulatory annotation for a token (e.g. "Lien released 2025-01-01").
     function updateDescription(uint256 tokenId, string calldata description) external onlyOwner {
         if (!_exists(tokenId)) revert PropertyDoesNotExist(tokenId);
         descriptions[tokenId] = description;
         emit DescriptionUpdated(tokenId, description);
     }
 
-    // ─── Carried-over V1 Functions ────────────────────────────────────────────
+    // ─── Core ─────────────────────────────────────────────────────────────────
 
-    /// @notice Mints a new property NFT. Identical to V1.
     function mintProperty(address to, PropertyMetadata calldata meta)
         external
         onlyOwner
@@ -105,7 +94,6 @@ contract PropertyNFTV2 is
         emit PropertyMinted(tokenId, to, meta.legalIdentifier);
     }
 
-    /// @notice Links a FractionalToken to this NFT. One-time.
     function linkFractionToken(uint256 tokenId, address token) external onlyOwner {
         if (!_exists(tokenId)) revert PropertyDoesNotExist(tokenId);
         if (fractionToken[tokenId] != address(0)) revert FractionTokenAlreadyLinked(tokenId);
@@ -114,7 +102,6 @@ contract PropertyNFTV2 is
         emit FractionTokenLinked(tokenId, token);
     }
 
-    /// @notice Updates stored USD valuation.
     function updateValuation(uint256 tokenId, uint256 newValuation) external onlyOwner {
         if (!_exists(tokenId)) revert PropertyDoesNotExist(tokenId);
         uint256 old = properties[tokenId].valuationUSD;
@@ -122,7 +109,6 @@ contract PropertyNFTV2 is
         emit ValuationUpdated(tokenId, old, newValuation);
     }
 
-    /// @notice Returns full property metadata.
     function getPropertyDetails(uint256 tokenId) external view returns (PropertyMetadata memory) {
         if (!_exists(tokenId)) revert PropertyDoesNotExist(tokenId);
         return properties[tokenId];
@@ -150,12 +136,11 @@ contract PropertyNFTV2 is
         return string(abi.encodePacked("data:application/json;base64,", Base64.encode(bytes(json))));
     }
 
-    // ─── UUPS Authorization ───────────────────────────────────────────────────
+    // ─── UUPS ─────────────────────────────────────────────────────────────────
 
-    /// @dev Only the owner can authorize a contract upgrade.
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    // ─── OZ Required Overrides ────────────────────────────────────────────────
+    // ─── Overrides ────────────────────────────────────────────────────────────
 
     function _update(address to, uint256 tokenId, address auth)
         internal

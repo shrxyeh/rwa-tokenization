@@ -1,5 +1,3 @@
-// TypeScript mirrors of on-chain structs returned by wagmi hooks.
-
 export interface PropertyMetadata {
   name: string;
   location: string;

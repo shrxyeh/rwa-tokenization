@@ -25,7 +25,7 @@ function RoundRow({
   addr: `0x${string}`;
   roundId: number;
   owner: `0x${string}`;
-  onClaim: (id: number) => void;
+  onClaim: (id: number, refetch: () => void) => void;
   busy: boolean;
 }) {
   const { data: round } = useReadContract({
@@ -35,7 +35,7 @@ function RoundRow({
     args: [BigInt(roundId)],
   });
 
-  const { data: claimed } = useReadContract({
+  const { data: claimed, refetch: refetchClaimed } = useReadContract({
     address: addr,
     abi: FRACTIONAL_TOKEN_ABI,
     functionName: "hasClaimed",
@@ -74,7 +74,7 @@ function RoundRow({
         </span>
       ) : (
         <button
-          onClick={() => onClaim(roundId)}
+          onClick={() => onClaim(roundId, refetchClaimed)}
           disabled={busy}
           className="btn-primary h-7 px-3 text-xs"
         >
@@ -114,7 +114,7 @@ function AssetDividends({ asset, owner }: { asset: AssetRecord; owner: `0x${stri
     }
   }
 
-  async function claim(roundId: number) {
+  async function claim(roundId: number, refetchClaimed: () => void) {
     try {
       const h = await writeContractAsync({
         address: asset.fractionToken,
@@ -123,8 +123,15 @@ function AssetDividends({ asset, owner }: { asset: AssetRecord; owner: `0x${stri
         args: [BigInt(roundId)],
       });
       setHash(h);
+      // Refresh the claimed status after confirmation so button switches to "Claimed"
+      setTimeout(refetchClaimed, 3000);
     } catch (e: unknown) {
-      alert((e instanceof Error ? e.message : String(e)).slice(0, 160));
+      const msg = (e instanceof Error ? e.message : String(e));
+      if (msg.includes("AlreadyClaimed")) {
+        alert("You have already claimed this dividend round.");
+      } else {
+        alert(msg.slice(0, 160));
+      }
     }
   }
 
