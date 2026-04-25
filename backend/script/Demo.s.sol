@@ -101,14 +101,14 @@ contract DemoScript is Script {
     }
 
     function _distributeTokens() internal {
-        _ft.transfer(_inv1, 333_000 * 1e18);
-        _ft.transfer(_inv2, 333_000 * 1e18);
-        _ft.transfer(_inv3, 334_000 * 1e18);
+        _ft.transfer(_inv1,   9_000 * 1e18);
+        _ft.transfer(_inv2, 450_000 * 1e18);
+        _ft.transfer(_inv3, 541_000 * 1e18);
 
         console.log("[4] Tokens distributed");
-        console.log("    inv1:", _ft.balanceOf(_inv1) / 1e18, "tokens (33.3%)");
-        console.log("    inv2:", _ft.balanceOf(_inv2) / 1e18, "tokens (33.3%)");
-        console.log("    inv3:", _ft.balanceOf(_inv3) / 1e18, "tokens (33.4%)");
+        console.log("    inv1:", _ft.balanceOf(_inv1) / 1e18, "tokens  (0.9% - retail cap)");
+        console.log("    inv2:", _ft.balanceOf(_inv2) / 1e18, "tokens (45.0% - accredited)");
+        console.log("    inv3:", _ft.balanceOf(_inv3) / 1e18, "tokens (54.1% - institutional)");
     }
 
     function _demonstrateCompliance() internal {
