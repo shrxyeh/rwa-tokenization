@@ -124,16 +124,36 @@ contract PropertyNFTV2 is
         returns (string memory)
     {
         string memory json = string(abi.encodePacked(
-            '{"name":"', meta.name, '"',
+            '{"name":"', _escapeJson(meta.name), '"',
             ',"description":"Tokenized real estate property deed."',
             ',"attributes":[',
-                '{"trait_type":"Location","value":"',         meta.location, '"},',
+                '{"trait_type":"Location","value":"',         _escapeJson(meta.location), '"},',
                 '{"trait_type":"Valuation USD","value":"',    LibString.toString(meta.valuationUSD), '"},',
-                '{"trait_type":"Legal Identifier","value":"', meta.legalIdentifier, '"},',
+                '{"trait_type":"Legal Identifier","value":"', _escapeJson(meta.legalIdentifier), '"},',
                 '{"trait_type":"Token ID","value":"',         LibString.toString(tokenId), '"}',
             ']}'
         ));
         return string(abi.encodePacked("data:application/json;base64,", Base64.encode(bytes(json))));
+    }
+
+    function _escapeJson(string memory s) internal pure returns (string memory) {
+        bytes memory b   = bytes(s);
+        bytes memory out = new bytes(b.length * 2);
+        uint256 j = 0;
+        for (uint256 i = 0; i < b.length; ) {
+            bytes1 c = b[i];
+            if (c == '"' || c == "\\") {
+                out[j++] = "\\";
+            }
+            out[j++] = c;
+            unchecked { ++i; }
+        }
+        bytes memory trimmed = new bytes(j);
+        for (uint256 k = 0; k < j; ) {
+            trimmed[k] = out[k];
+            unchecked { ++k; }
+        }
+        return string(trimmed);
     }
 
     // ─── UUPS ─────────────────────────────────────────────────────────────────

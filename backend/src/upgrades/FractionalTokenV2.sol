@@ -92,6 +92,11 @@ contract FractionalTokenV2 is
         maxSupply        = _maxSupply;
     }
 
+    // ─── Pause ────────────────────────────────────────────────────────────────
+
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
+
     // ─── V2: Token Locking ────────────────────────────────────────────────────
 
     /// @notice Prevents outbound transfers from `investor` until `until` (unix timestamp).
@@ -120,8 +125,9 @@ contract FractionalTokenV2 is
 
     function depositDividend() external payable onlyOwner {
         if (msg.value == 0) revert ZeroETH();
+        // snapshot is the previous block so current-block transfers don't affect the round
         uint256 snap    = block.number - 1;
-        uint256 supply  = totalSupply();
+        uint256 supply  = getPastTotalSupply(snap);
         uint256 roundId = roundCount;
         dividendRounds[roundId] = DividendRound({
             totalETH:              msg.value,
@@ -156,6 +162,8 @@ contract FractionalTokenV2 is
     {
         if (from == address(0)) { super._update(from, to, amount); return; }
         if (to   == address(0)) { super._update(from, to, amount); return; }
+
+        _requireNotPaused();
 
         uint256 unlockTime = lockUntil[from];
         if (unlockTime != 0 && block.timestamp < unlockTime) {
