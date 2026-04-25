@@ -9,11 +9,7 @@ import {RWAFactory} from "../src/factory/RWAFactory.sol";
 
 /// @notice Full end-to-end demo: deploy, KYC 3 investors, create property,
 ///         distribute tokens, execute a valid transfer, catch a blocked transfer.
-///
-/// Usage (local anvil):
-///   anvil &
-///   source .env
-///   forge script script/Demo.s.sol --rpc-url localhost --broadcast
+
 contract DemoScript is Script {
     // Shared state threaded through internal helpers to keep stack depth low
     IdentityRegistry internal _registry;

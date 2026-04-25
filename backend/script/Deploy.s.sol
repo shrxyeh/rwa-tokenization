@@ -7,14 +7,6 @@ import {PropertyNFT} from "../src/assets/PropertyNFT.sol";
 import {RWAFactory} from "../src/factory/RWAFactory.sol";
 
 /// @notice Deploys the core RWA system contracts to the target network.
-///
-/// Usage:
-///   # Sepolia testnet
-///   source .env
-///   forge script script/Deploy.s.sol --rpc-url sepolia --broadcast --verify
-///
-///   # Local anvil
-///   forge script script/Deploy.s.sol --rpc-url localhost --broadcast
 contract DeployScript is Script {
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
